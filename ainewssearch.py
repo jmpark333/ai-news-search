@@ -81,6 +81,8 @@ logging.getLogger("requests").setLevel(logging.WARNING)
 DB_FILE = os.path.join(BASE_DIR, "enhanced_ai_blog_database.db")
 NAVER_CLIENT_ID = "eaxPqk5yaWE9N4tVgRA8"
 NAVER_CLIENT_SECRET = "HF4MYYE3qs"
+# Tavily Search API 설정
+TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
 # Z.AI API 설정 (비활성화)
 # ZAI_API_KEY = "6e74659313a8456da1b4881d29dc098f.SgJrKDIG5qoTW9YO"
 # ZAI_API_URL = "https://api.z.ai/api/paas/v4/chat/completions"
@@ -744,7 +746,7 @@ class SearchEngine:
     def search_duckduckgo(
         self, query: str, num_results: int = 10
     ) -> List[SearchResult]:
-        """DuckDuckGo 검색 (안정성 강화 버전) - 라이브러리 우선, 대체 방법 포함"""
+        """DuckDuckGo 검색 (실패 시 Tavily 대체)"""
         try:
             logger.info(f"DuckDuckGo 검색 시작 (영어): {query}")
 
@@ -766,26 +768,20 @@ class SearchEngine:
 
             search_results = []
 
-            # 방법 1: 최신 ddgs 라이브러리 (안정성 향상된 버전)
+            # 방법 1: 최신 ddgs 라이브러리
             try:
                 from ddgs import DDGS
 
                 logger.debug("최신 ddgs 라이브러리 사용 시도")
 
-                # 안정한 초기화 및 검색
-                ddgs = DDGS(
-                    proxies=None,  # 프록시 설정 제거
-                    timeout=30,  # 타임아웃 증가
-                    verify_ssl=True,  # SSL 인증서 검증
-                )
+                ddgs = DDGS()
 
                 try:
-                    # 검색 실행 - 안정성을 위해 타임아웃 조절
                     results = list(
                         ddgs.text(
                             clean_query,
                             max_results=num_results * 2,
-                            timeout=20,  # 개별 검색 타임아웃
+                            timeout=20,
                         )
                     )
                     search_results.extend(results)
@@ -816,31 +812,10 @@ class SearchEngine:
                 except Exception as legacy_error:
                     logger.warning(f"이전 버전 라이브러리 실패: {str(legacy_error)}")
 
-            # 방법 3: 안전한 직접 API 호출 (마지막 수단)
+            # DuckDuckGo 실패 시 Tavily 대체
             if not search_results:
-                try:
-                    logger.info("안전한 직접 API 호출 시도")
-                    api_results = self._safe_direct_api_call(clean_query, num_results)
-                    if api_results:
-                        search_results.extend(api_results)
-                        logger.info(f"직접 API 성공: {len(api_results)}개 결과")
-                except Exception as direct_api_error:
-                    logger.warning(f"직접 API 실패: {str(direct_api_error)}")
-
-            # 방법 4: Google News RSS 대체 (최후 수단)
-            if not search_results:
-                try:
-                    logger.info("Google News RSS 피드 대체 시도")
-                    rss_results = self._try_google_news_rss(clean_query, num_results)
-                    if rss_results:
-                        search_results.extend(rss_results)
-                        logger.info(f"Google News RSS 성공: {len(rss_results)}개 결과")
-                except Exception as rss_error:
-                    logger.warning(f"Google News RSS 실패: {str(rss_error)}")
-
-            if not search_results:
-                logger.warning("모든 DuckDuckGo 검색 방법 실패, 빈 결과 반환")
-                return []
+                logger.warning("DuckDuckGo 검색 실패, Tavily 대제 시도")
+                return self.search_tavily(query, num_results)
 
             logger.debug(f"DuckDuckGo 총 검색 결과: {len(search_results)}개")
 
@@ -854,8 +829,6 @@ class SearchEngine:
             logger.info(
                 f"DuckDuckGo 검색 필터링 시작 - 제외된 사이트: {len(excluded_sites)}개, 제외된 페이지: {len(excluded_pages)}개"
             )
-            logger.debug(f"제외된 사이트 목록: {excluded_sites}")
-            logger.debug(f"제외된 페이지 목록: {excluded_pages}")
 
             # 제외 키워드 목록
             exclude_keywords = [
@@ -905,10 +878,246 @@ class SearchEngine:
                 ):
                     continue
 
-                # 날짜 처리 - 강화된 날짜 추출
+                # 날짜 처리
                 extracted_date = self._extract_date_from_content_enhanced(
                     title, summary, url
                 )
+
+                if not extracted_date:
+                    logger.debug(f"날짜를 추출할 수 없어 제외: {title[:50]}...")
+                    continue
+
+                if not self._is_within_last_15_days_strict(
+                    extracted_date, title, summary
+                ):
+                    logger.debug(
+                        f"날짜 필터링: {extracted_date} (15일 초과) - 제외: {title[:50]}..."
+                    )
+                    continue
+
+                publish_date = extracted_date
+                results_with_dates.append((result, publish_date, title, summary, url))
+
+            # 날짜순으로 정렬
+            results_with_dates.sort(key=lambda x: x[1], reverse=True)
+
+            # 정렬된 결과에서 최종 결과 생성
+            for result_data, publish_date, title, summary, url in results_with_dates:
+                try:
+                    original_lang = self._detect_language(title + " " + summary)
+
+                    if original_lang == "en":
+                        translated_title = self._translate_with_google(title)
+                        translated_summary = self._translate_with_google(summary)
+                    elif original_lang == "ko":
+                        translated_title = title
+                        translated_summary = summary
+                    else:
+                        translated_title = self._translate_with_google(title)
+                        translated_summary = self._translate_with_google(summary)
+
+                    if original_lang == "en":
+                        if (
+                            not translated_title
+                            or translated_title == title
+                            or len(translated_title.strip()) == 0
+                        ):
+                            translated_title = self._fallback_translate(title)
+
+                        if (
+                            not translated_summary
+                            or translated_summary == summary
+                            or len(translated_summary.strip()) == 0
+                        ):
+                            translated_summary = self._fallback_translate(summary)
+
+                except Exception as translate_error:
+                    logger.error(f"DuckDuckGo 결과 번역 오류: {str(translate_error)}")
+                    translated_title = self._fallback_translate(title)
+                    translated_summary = self._fallback_translate(summary)
+
+                result_obj = SearchResult(
+                    title=translated_title,
+                    summary=translated_summary,
+                    url=url,
+                    source="DuckDuckGo",
+                    publish_date=publish_date,
+                    keywords=[query],
+                    language="ko",
+                )
+                result_obj.relevance_score = self._calculate_relevance_score(result_obj)
+
+                if not self._should_include_result(
+                    result_obj.title,
+                    result_obj.summary,
+                    result_obj.url,
+                    excluded_sites,
+                    excluded_pages,
+                    [],
+                ):
+                    continue
+
+                results.append(result_obj)
+
+                if len(results) >= num_results:
+                    break
+
+            # 결과 캐시 저장
+            self.cache_manager.cache_results(cache_key, results)
+
+            logger.info(f"DuckDuckGo 검색 결과: {len(results)}개 (필터링됨)")
+            return results
+
+        except Exception as e:
+            logger.error(f"DuckDuckGo 검색 오류: {str(e)}")
+            # 예외 발생 시 Tavily 대체 시도
+            logger.info("DuckDuckGo 예외로 인해 Tavily 대체 시도")
+            return self.search_tavily(query, num_results)
+
+    def search_tavily(self, query: str, num_results: int = 10) -> List[SearchResult]:
+        """Tavily Search API 검색"""
+        try:
+            logger.info(f"Tavily 검색 시작: {query}")
+
+            # API 키 확인
+            if not TAVILY_API_KEY:
+                logger.error("TAVILY_API_KEY가 설정되지 않음")
+                return []
+
+            # 캐시 확인
+            cache_key = f"tavily_{query}_{num_results}"
+            cached_results = self.cache_manager.get_cached_results(cache_key)
+            if cached_results:
+                logger.info(f"Tavily 캐시에서 로드: {len(cached_results)}개")
+                return cached_results
+
+            # 영어 검색어로 변환
+            english_query = self._convert_to_english_query(query)
+            clean_query = re.sub(r"[^\w\s-]", "", english_query).strip()
+            if not clean_query:
+                logger.warning("영어 검색어가 유효하지 않음")
+                return []
+
+            logger.info(f"변환된 영어 검색어: {clean_query}")
+
+            # Tavily API 호출
+            from tavily import TavilyClient
+
+            client = TavilyClient(api_key=TAVILY_API_KEY)
+
+            # Tavily Search API 실행
+            response = client.search(
+                query=clean_query,
+                max_results=num_results * 2,  # 필터링을 위해 더 많은 결과 요청
+                search_depth="advanced",
+                include_answer=False,
+                include_raw_content=False,
+                include_images=False,
+                days=7,  # 최근 7일 이내 기사만 검색
+            )
+
+            # 결과 파싱
+            search_results = []
+            for result in response.get("results", []):
+                search_results.append({
+                    "title": result.get("title", ""),
+                    "href": result.get("url", ""),
+                    "body": result.get("content", ""),
+                    "score": result.get("score", 0.0),
+                    "published_date": result.get("published_date", ""),  # Tavily 제공 날짜
+                })
+
+            if not search_results:
+                logger.warning("Tavily 검색 결과 없음")
+                return []
+
+            logger.debug(f"Tavily 총 검색 결과: {len(search_results)}개")
+
+            results = []
+
+            # 제외 목록 가져오기
+            excluded_sites = self._get_excluded_sites()
+            excluded_pages = self._get_excluded_pages()
+
+            # 디버깅 로그 추가
+            logger.info(
+                f"Tavily 검색 필터링 시작 - 제외된 사이트: {len(excluded_sites)}개, 제외된 페이지: {len(excluded_pages)}개"
+            )
+            logger.debug(f"제외된 사이트 목록: {excluded_sites}")
+            logger.debug(f"제외된 페이지 목록: {excluded_pages}")
+
+            # 제외 키워드 목록
+            exclude_keywords = [
+                "github",
+                "documentation",
+                "api reference",
+                "official website",
+                "home page",
+                "wikipedia",
+                "wiki",
+                "tutorial",
+                "getting started",
+                "installation",
+                "download",
+                "pricing",
+                "about",
+                "company",
+                "careers",
+                "contact",
+                "privacy",
+                "terms",
+                "policy",
+            ]
+
+            # 결과를 날짜 순으로 정렬하기 위한 임시 리스트
+            results_with_dates = []
+
+            for result in search_results:
+                title = result.get("title", "")
+                url = result.get("href", "")
+                summary = result.get("body", "")
+                tavily_date = result.get("published_date", "")
+
+                if not title or not url:
+                    continue
+
+                # 필터링 적용
+                if not self._should_include_result(
+                    title,
+                    summary,
+                    url,
+                    excluded_sites,
+                    excluded_pages,
+                    exclude_keywords,
+                ):
+                    continue
+
+                # 날짜 처리 - Tavily 제공 날짜 우선 사용
+                extracted_date = None
+
+                # 1. Tavily가 제공하는 날짜 우선 사용
+                if tavily_date:
+                    try:
+                        # Tavily 날짜 포맷 처리 (ISO 8601 등)
+                        from datetime import datetime
+                        # 다양한 날짜 포맷 시도
+                        for fmt in ["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S.%fZ"]:
+                            try:
+                                extracted_date = datetime.strptime(tavily_date.split("T")[0][:10], "%Y-%m-%d").strftime("%Y-%m-%d")
+                                break
+                            except:
+                                continue
+                        if not extracted_date:
+                            extracted_date = tavily_date.split("T")[0][:10]  # YYYY-MM-DD 형식 추출 시도
+                        logger.debug(f"Tavily 제공 날짜 사용: {extracted_date}")
+                    except Exception as e:
+                        logger.debug(f"Tavily 날짜 파싱 실패: {tavily_date}, 오류: {e}")
+
+                # 2. Tavily 날짜가 없는 경우 내용에서 날짜 추출
+                if not extracted_date:
+                    extracted_date = self._extract_date_from_content_enhanced(
+                        title, summary, url
+                    )
 
                 # 날짜가 없는 경우 엄격하게 제외 (오래된 기사 방지)
                 if not extracted_date:
@@ -917,12 +1126,12 @@ class SearchEngine:
                     )
                     continue
 
-                # 최근 3일 이내인지 확인 - 훨씬 더 엄격한 필터링
-                if not self._is_within_last_3_days_strict(
+                # 최근 7일 이내인지 확인 (Tavily API days=7과 맞춤)
+                if not self._is_within_last_7_days_strict(
                     extracted_date, title, summary
                 ):
                     logger.debug(
-                        f"엄격한 날짜 필터링: {extracted_date} (3일 초과) - 제외: {title[:50]}..."
+                        f"7일 초과 날짜 필터링: {extracted_date} - 제외: {title[:50]}..."
                     )
                     continue
 
@@ -942,7 +1151,7 @@ class SearchEngine:
                     original_lang = self._detect_language(title + " " + summary)
                     logger.debug(f"감지된 원본 언어: {original_lang}")
 
-                    # DuckDuckGo는 영어 검색이므로 무조건 번역 시도
+                    # 영어인 경우 번역 시도
                     if original_lang == "en":
                         # 영어인 경우 구글 무료 번역으로 번역
                         translated_title = self._translate_with_google(title)
@@ -986,7 +1195,7 @@ class SearchEngine:
 
                 except Exception as translate_error:
                     logger.error(
-                        f"DuckDuckGo 결과 번역 중 심각한 오류: {str(translate_error)}"
+                        f"Tavily 결과 번역 중 심각한 오류: {str(translate_error)}"
                     )
                     # 대체 번역 방법 사용
                     translated_title = self._fallback_translate(title)
@@ -996,7 +1205,7 @@ class SearchEngine:
                     title=translated_title,
                     summary=translated_summary,
                     url=url,
-                    source="DuckDuckGo",
+                    source="Tavily",
                     publish_date=publish_date,
                     keywords=[query],
                     language="ko",
@@ -1015,7 +1224,7 @@ class SearchEngine:
                     [],
                 ):
                     logger.debug(
-                        f"DuckDuckGo 검색 결과 필터링 제외 (제외된 페이지): {result_obj.url}"
+                        f"Tavily 검색 결과 필터링 제외 (제외된 페이지): {result_obj.url}"
                     )
                     continue
 
@@ -1027,12 +1236,12 @@ class SearchEngine:
             # 결과 캐시 저장
             self.cache_manager.cache_results(cache_key, results)
 
-            logger.info(f"DuckDuckGo 검색 결과: {len(results)}개 (필터링됨)")
+            logger.info(f"Tavily 검색 결과: {len(results)}개 (필터링됨)")
             logger.debug(f"최종 결과 URLs: {[result.url for result in results]}")
             return results
 
         except Exception as e:
-            logger.error(f"DuckDuckGo 검색 오류: {str(e)}")
+            logger.error(f"Tavily 검색 오류: {str(e)}")
             return []
 
     def _get_excluded_sites(self) -> List[str]:
@@ -1565,6 +1774,53 @@ class SearchEngine:
             logger.error(f"엄격한 날짜 필터링 오류: {date_str} - {str(e)}")
             return False
 
+    def _is_within_last_15_days_strict(
+        self, date_str: str, title: str = "", summary: str = ""
+    ) -> bool:
+        """최근 15일 이내인지 확인 (완화된 버전)"""
+        if not date_str:
+            return False
+
+        try:
+            # 이미 YYYY-MM-DD 형식이 아닌 경우 변환 시도
+            if not re.match(r"\d{4}-\d{2}-\d{2}", date_str):
+                extracted_date = self._extract_date_from_content_enhanced(
+                    title, summary, ""
+                )
+                if extracted_date:
+                    date_str = extracted_date
+                else:
+                    logger.warning(f"날짜 형식을 인식할 수 없음: {date_str}")
+                    return False
+
+            # 날짜 파싱
+            date_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d")
+
+            # 현재 시간과 비교 (시간대 고려)
+            now = datetime.datetime.now()
+            fifteen_days_ago = now - datetime.timedelta(days=15)
+
+            # 15일 경계 포함 (15일 전이어야 함)
+            is_recent = date_obj >= fifteen_days_ago
+
+            # 디버깅 로그
+            if not is_recent:
+                days_diff = (now - date_obj).days
+                logger.debug(
+                    f"완화된 날짜 필터링: {date_str} ({days_diff}일 전) - 15일 초과로 제외"
+                )
+            else:
+                days_diff = (now - date_obj).days
+                logger.debug(
+                    f"완화된 날짜 포함: {date_str} ({days_diff}일 전) - 15일 이내"
+                )
+
+            return is_recent
+
+        except Exception as e:
+            logger.error(f"완화된 날짜 필터링 오류: {date_str} - {str(e)}")
+            return False
+
     def _is_within_last_3_days_strict(
         self, date_str: str, title: str = "", summary: str = ""
     ) -> bool:
@@ -1610,6 +1866,48 @@ class SearchEngine:
 
         except Exception as e:
             logger.error(f"초엄격 날짜 필터링 오류: {date_str} - {str(e)}")
+            return False
+
+    def _is_within_last_7_days_strict(
+        self, date_str: str, title: str = "", summary: str = ""
+    ) -> bool:
+        """최근 7일 이내인지 확인 (Tavily용)"""
+        if not date_str:
+            return False
+
+        try:
+            # 이미 YYYY-MM-DD 형식이 아닌 경우 변환 시도
+            if not re.match(r"\d{4}-\d{2}-\d{2}", date_str):
+                extracted_date = self._extract_date_from_content_enhanced(
+                    title, summary, ""
+                )
+                if extracted_date:
+                    date_str = extracted_date
+                else:
+                    logger.warning(f"날짜 형식을 인식할 수 없음: {date_str}")
+                    return False
+
+            # 날짜 파싱
+            date_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d")
+
+            # 현재 시간과 비교 (시간대 고려)
+            now = datetime.datetime.now()
+            seven_days_ago = now - datetime.timedelta(days=7)
+
+            # 7일 경계 포함 (7일 전이어야 함)
+            is_recent = date_obj >= seven_days_ago
+
+            # 디버깅 로그
+            if not is_recent:
+                days_diff = (now - date_obj).days
+                logger.debug(
+                    f"7일 날짜 필터링: {date_str} ({days_diff}일 전) - 7일 초과로 제외"
+                )
+
+            return is_recent
+
+        except Exception as e:
+            logger.error(f"7일 날짜 필터링 오류: {date_str} - {str(e)}")
             return False
 
     def _extract_date_from_content_enhanced(
@@ -2745,7 +3043,7 @@ class EnhancedAIBlogSystem:
         # 한국어 키워드로 네이버 검색
         korean_keywords = [kw for kw in SEARCH_KEYWORDS if re.search("[가-힣]", kw)]
 
-        # 영어 키워드로 DuckDuckGo 검색
+        # 영어 키워드로 Tavily 검색
         english_keywords = [
             kw for kw in SEARCH_KEYWORDS if not re.search("[가-힣]", kw)
         ]
@@ -2775,7 +3073,7 @@ class EnhancedAIBlogSystem:
                 logger.error(f"네이버 검색 실패 ({keyword}): {str(e)}")
                 continue
 
-        # DuckDuckGo 검색 - 병렬 처리
+        # DuckDuckGo 검색 - 병렬 처리 (실패 시 Tavily 자동 대체)
         logger.info(
             f"DuckDuckGo 검색 시작 (영어 키워드 {len(english_keywords)}개): {english_keywords[:3]}..."
         )
@@ -2814,7 +3112,7 @@ class EnhancedAIBlogSystem:
             )
 
         logger.info(
-            f"총 검색 결과: {len(all_results)}개 (네이버: {sum(1 for r in all_results if r.source == 'Naver')}, DuckDuckGo: {sum(1 for r in all_results if r.source == 'DuckDuckGo')})"
+            f"총 검색 결과: {len(all_results)}개 (네이버: {sum(1 for r in all_results if r.source == 'Naver')}, DuckDuckGo: {sum(1 for r in all_results if r.source == 'DuckDuckGo')}, Tavily: {sum(1 for r in all_results if r.source == 'Tavily')})"
         )
         return all_results
 
@@ -2892,7 +3190,7 @@ class EnhancedAIBlogSystem:
         naver_results = self.search_engine.search_naver(topic, display=10)
         all_results.extend(naver_results)
 
-        # DuckDuckGo 검색
+        # DuckDuckGo 검색 (실패 시 Tavily 자동 대체)
         duckduckgo_results = self.search_engine.search_duckduckgo(topic, num_results=10)
         all_results.extend(duckduckgo_results)
 

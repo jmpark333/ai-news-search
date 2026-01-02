@@ -11,5 +11,5 @@ duckduckgo-search==4.1.1
 # Tavily Search API 라이브러리 (대체용)
 tavily-python>=0.5.0
 
-# 구글 번역 라이브러리
-googletrans==4.0.0-rc1
+# 구글 번역 라이브러리 (googletrans 대체 - httpx 충돌 해결)
+deep-translator>=1.11.0

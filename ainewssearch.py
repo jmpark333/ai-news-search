@@ -2618,16 +2618,16 @@ class SearchEngine:
 
         logger.debug(f"구글 번역 시도 ({detected_lang} -> ko): {text[:50]}...")
 
-        # 구글 무료 번역 API 사용
+        # 구글 무료 번역 API 사용 (deep-translator 라이브러리)
         try:
-            # googletrans 라이브러리 임포트 시도
+            # deep-translator 라이브러리 임포트 시도
             try:
-                from googletrans import Translator
+                from deep_translator import GoogleTranslator
 
-                translator = Translator()
+                translator = GoogleTranslator(source="auto", target="ko")
             except ImportError:
                 logger.error(
-                    "googletrans 라이브러리가 설치되지 않았습니다. 'pip install googletrans==4.0.0-rc1'을 실행하세요."
+                    "deep-translator 라이브러리가 설치되지 않았습니다. 'pip install deep-translator'을 실행하세요."
                 )
                 return text
 
@@ -2636,31 +2636,20 @@ class SearchEngine:
             for attempt in range(max_retries):
                 try:
                     # 번역 실행
-                    result = translator.translate(
-                        text,
-                        dest="ko",
-                        src=detected_lang if detected_lang != "auto" else "auto",
-                    )
+                    translated_text = translator.translate(text).strip()
 
-                    if result and hasattr(result, "text") and result.text:
-                        translated_text = result.text.strip()
-
-                        # 번역된 텍스트가 원본과 다를 경우에만 반환
-                        if translated_text != text and len(translated_text) > 0:
-                            logger.debug(
-                                f"구글 번역 성공 (시도 {attempt + 1}): {text[:30]}... -> {translated_text[:30]}..."
-                            )
-                            return translated_text
-                        else:
-                            logger.debug(
-                                f"번역 결과가 원본과 동일하거나 비어있음 (시도 {attempt + 1})"
-                            )
-                            if attempt == max_retries - 1:
-                                return text
-                    else:
-                        logger.warning(
-                            f"번역 결과가 유효하지 않음 (시도 {attempt + 1})"
+                    # 번역된 텍스트가 원본과 다를 경우에만 반환
+                    if translated_text != text and len(translated_text) > 0:
+                        logger.debug(
+                            f"구글 번역 성공 (시도 {attempt + 1}): {text[:30]}... -> {translated_text[:30]}..."
                         )
+                        return translated_text
+                    else:
+                        logger.debug(
+                            f"번역 결과가 원본과 동일하거나 비어있음 (시도 {attempt + 1})"
+                        )
+                        if attempt == max_retries - 1:
+                            return text
 
                 except Exception as translate_error:
                     logger.warning(

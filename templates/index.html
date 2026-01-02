@@ -336,15 +336,30 @@
         }
 
         .stats-card {
-            border-radius: 20px;
-            padding: 2rem 1.5rem;
+            border-radius: 12px;
+            padding: 1rem 1.25rem;
             text-align: center;
-            margin-bottom: 1rem;
+            margin-bottom: 0;
             color: white;
             position: relative;
             overflow: hidden;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             border: 1px solid rgba(255, 255, 255, 0.2);
+            cursor: default;
+            min-height: 80px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .stats-card.clickable {
+            cursor: pointer;
+        }
+
+        .stats-card.clickable:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
         }
 
         .stats-card::before {
@@ -357,11 +372,6 @@
             background: linear-gradient(135deg, rgba(255,255,255,0.2) 0%, transparent 100%);
             opacity: 0;
             transition: opacity 0.3s ease;
-        }
-
-        .stats-card:hover {
-            transform: translateY(-6px) scale(1.02);
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
         }
 
         .stats-card:hover::before {
@@ -390,21 +400,22 @@
         }
 
         .stats-number {
-            font-size: 2.5rem;
-            font-weight: 800;
-            margin-bottom: 0.5rem;
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
             position: relative;
             z-index: 1;
+            line-height: 1.2;
         }
 
         .stats-label {
             opacity: 0.95;
-            font-size: 0.875rem;
-            font-weight: 500;
+            font-size: 0.75rem;
+            font-weight: 600;
             position: relative;
             z-index: 1;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
         }
 
         .alert-custom {
@@ -593,17 +604,18 @@
 
             /* 모바일에서 stats-card 2열 배치 */
             .stats-card {
-                padding: 1.5rem 1rem;
+                padding: 1rem 1rem;
                 flex: 0 0 calc(50% - 0.5rem) !important;
                 max-width: calc(50% - 0.5rem) !important;
+                min-height: 70px;
             }
 
             .stats-number {
-                font-size: 1.75rem;
+                font-size: 1.5rem;
             }
 
             .stats-label {
-                font-size: 0.75rem;
+                font-size: 0.7rem;
             }
 
             .content-section {
@@ -621,10 +633,15 @@
                 flex: 0 0 100% !important;
                 max-width: 100% !important;
                 padding: 1.25rem 1rem;
+                min-height: 75px;
             }
 
             .stats-number {
-                font-size: 2rem;
+                font-size: 1.75rem;
+            }
+
+            .stats-label {
+                font-size: 0.75rem;
             }
         }
     </style>
@@ -703,38 +720,36 @@
                 <!-- 데이터베이스 탭 -->
                 <div class="tab-pane fade" id="database" role="tabpanel">
                     <div class="content-section">
-                        <div class="row mb-4">
+                        <!-- 탭 스타일 필터 버튼 -->
+                        <div class="row mb-4 g-2">
                             <div class="col" style="flex: 0 0 20%; max-width: 20%;">
                                 <div class="stats-card">
                                     <div class="stats-number" id="totalArticles">0</div>
-                                    <div class="stats-label">전체 기사 수</div>
+                                    <div class="stats-label">전체 기사</div>
                                 </div>
                             </div>
                             <div class="col" style="flex: 0 0 20%; max-width: 20%;">
-                                <div class="stats-card" onclick="filterDatabaseArticlesBySource('Naver')"
-                                    style="cursor: pointer;">
+                                <div class="stats-card clickable" onclick="filterDatabaseArticlesBySource('Naver')">
                                     <div class="stats-number" id="naverArticles">0</div>
-                                    <div class="stats-label">네이버 기사</div>
+                                    <div class="stats-label">네이버</div>
                                 </div>
                             </div>
                             <div class="col" style="flex: 0 0 20%; max-width: 20%;">
-                                <div class="stats-card" onclick="filterDatabaseArticlesBySource('DuckDuckGo')"
-                                    style="cursor: pointer;">
+                                <div class="stats-card clickable" onclick="filterDatabaseArticlesBySource('DuckDuckGo')">
                                     <div class="stats-number" id="ddgArticles">0</div>
-                                    <div class="stats-label">DuckDuckGo 기사</div>
+                                    <div class="stats-label">DuckDuckGo</div>
                                 </div>
                             </div>
                             <div class="col" style="flex: 0 0 20%; max-width: 20%;">
-                                <div class="stats-card" onclick="filterDatabaseArticlesBySource('Tavily')"
-                                    style="cursor: pointer;">
+                                <div class="stats-card clickable" onclick="filterDatabaseArticlesBySource('Tavily')">
                                     <div class="stats-number" id="tavilyArticles">0</div>
-                                    <div class="stats-label">Tavily 기사</div>
+                                    <div class="stats-label">Tavily</div>
                                 </div>
                             </div>
                             <div class="col" style="flex: 0 0 20%; max-width: 20%;">
                                 <div class="stats-card">
                                     <div class="stats-number" id="excludedCount">0</div>
-                                    <div class="stats-label">제외된 항목</div>
+                                    <div class="stats-label">제외됨</div>
                                 </div>
                             </div>
                         </div>

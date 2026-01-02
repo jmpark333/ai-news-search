@@ -335,6 +335,116 @@
             transform: translateX(4px);
         }
 
+        /* 데이터베이스 필터 탭 스타일 */
+        .filter-tabs-wrapper {
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        .filter-tabs {
+            display: flex;
+            gap: 0.5rem;
+            width: 100%;
+            justify-content: space-between;
+        }
+
+        .filter-tab {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 0.75rem 0.5rem;
+            background: rgba(0, 0, 0, 0.05);
+            border: 2px solid rgba(0, 0, 0, 0.08);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            min-width: 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .filter-tab::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--primary-gradient);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 0;
+        }
+
+        .filter-tab:hover::before {
+            opacity: 0.1;
+        }
+
+        .filter-tab.active {
+            background: var(--primary-gradient);
+            border-color: transparent;
+            color: white;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .filter-tab.active::before {
+            display: none;
+        }
+
+        .filter-tab:hover:not(.active) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .filter-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            position: relative;
+            z-index: 1;
+            margin-bottom: 0.25rem;
+            white-space: nowrap;
+        }
+
+        .filter-tab.active .filter-label {
+            color: white;
+        }
+
+        .filter-count {
+            font-size: 1.25rem;
+            font-weight: 700;
+            position: relative;
+            z-index: 1;
+        }
+
+        .filter-tab.active .filter-count {
+            color: white;
+        }
+
+        /* 각 필터 탭의 다른 색상 (active 상태) */
+        .filter-tab:nth-child(1).active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .filter-tab:nth-child(2).active {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+
+        .filter-tab:nth-child(3).active {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+        }
+
+        .filter-tab:nth-child(4).active {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+        }
+
+        .filter-tab:nth-child(5).active {
+            background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);
+        }
+
         .stats-card {
             border-radius: 12px;
             padding: 1rem 1.25rem;
@@ -602,6 +712,24 @@
                 font-size: 0.85rem;
             }
 
+            /* 필터 탭 모바일 */
+            .filter-tabs {
+                gap: 0.35rem;
+            }
+
+            .filter-tab {
+                padding: 0.65rem 0.35rem;
+                min-width: 0;
+            }
+
+            .filter-label {
+                font-size: 0.65rem;
+            }
+
+            .filter-count {
+                font-size: 1.1rem;
+            }
+
             /* 모바일에서 stats-card 2열 배치 */
             .stats-card {
                 padding: 1rem 1rem;
@@ -628,6 +756,40 @@
         }
 
         @media (max-width: 576px) {
+            /* 필터 탭 세로 스크롤 */
+            .filter-tabs-wrapper {
+                margin: 0 -1rem;
+                padding: 0 1rem;
+            }
+
+            .filter-tabs {
+                overflow-x: auto;
+                flex-wrap: nowrap;
+                justify-content: flex-start;
+                gap: 0.5rem;
+                padding-bottom: 0.5rem;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+            }
+
+            .filter-tabs::-webkit-scrollbar {
+                display: none;
+            }
+
+            .filter-tab {
+                flex: 0 0 auto;
+                min-width: 75px;
+                padding: 0.75rem 0.75rem;
+            }
+
+            .filter-label {
+                font-size: 0.7rem;
+            }
+
+            .filter-count {
+                font-size: 1.15rem;
+            }
+
             /* 작은 모바일에서는 1열 또는 더 크게 */
             .stats-card {
                 flex: 0 0 100% !important;
@@ -720,37 +882,29 @@
                 <!-- 데이터베이스 탭 -->
                 <div class="tab-pane fade" id="database" role="tabpanel">
                     <div class="content-section">
-                        <!-- 탭 스타일 필터 버튼 -->
-                        <div class="row mb-4 g-2">
-                            <div class="col" style="flex: 0 0 20%; max-width: 20%;">
-                                <div class="stats-card">
-                                    <div class="stats-number" id="totalArticles">0</div>
-                                    <div class="stats-label">전체 기사</div>
-                                </div>
-                            </div>
-                            <div class="col" style="flex: 0 0 20%; max-width: 20%;">
-                                <div class="stats-card clickable" onclick="filterDatabaseArticlesBySource('Naver')">
-                                    <div class="stats-number" id="naverArticles">0</div>
-                                    <div class="stats-label">네이버</div>
-                                </div>
-                            </div>
-                            <div class="col" style="flex: 0 0 20%; max-width: 20%;">
-                                <div class="stats-card clickable" onclick="filterDatabaseArticlesBySource('DuckDuckGo')">
-                                    <div class="stats-number" id="ddgArticles">0</div>
-                                    <div class="stats-label">DuckDuckGo</div>
-                                </div>
-                            </div>
-                            <div class="col" style="flex: 0 0 20%; max-width: 20%;">
-                                <div class="stats-card clickable" onclick="filterDatabaseArticlesBySource('Tavily')">
-                                    <div class="stats-number" id="tavilyArticles">0</div>
-                                    <div class="stats-label">Tavily</div>
-                                </div>
-                            </div>
-                            <div class="col" style="flex: 0 0 20%; max-width: 20%;">
-                                <div class="stats-card">
-                                    <div class="stats-number" id="excludedCount">0</div>
-                                    <div class="stats-label">제외됨</div>
-                                </div>
+                        <!-- 필터 탭 바 -->
+                        <div class="filter-tabs-wrapper mb-4">
+                            <div class="filter-tabs" id="databaseFilterTabs">
+                                <button class="filter-tab active" data-source="all" onclick="filterDatabaseArticlesBySource('all')">
+                                    <span class="filter-label">전체 기사</span>
+                                    <span class="filter-count" id="totalArticles">0</span>
+                                </button>
+                                <button class="filter-tab" data-source="Naver" onclick="filterDatabaseArticlesBySource('Naver')">
+                                    <span class="filter-label">네이버</span>
+                                    <span class="filter-count" id="naverArticles">0</span>
+                                </button>
+                                <button class="filter-tab" data-source="DuckDuckGo" onclick="filterDatabaseArticlesBySource('DuckDuckGo')">
+                                    <span class="filter-label">DuckDuckGo</span>
+                                    <span class="filter-count" id="ddgArticles">0</span>
+                                </button>
+                                <button class="filter-tab" data-source="Tavily" onclick="filterDatabaseArticlesBySource('Tavily')">
+                                    <span class="filter-label">Tavily</span>
+                                    <span class="filter-count" id="tavilyArticles">0</span>
+                                </button>
+                                <button class="filter-tab" data-source="excluded" onclick="showExcludedItems()">
+                                    <span class="filter-label">제외됨</span>
+                                    <span class="filter-count" id="excludedCount">0</span>
+                                </button>
                             </div>
                         </div>
 
@@ -1324,6 +1478,23 @@
             // 검색 입력 필드 초기화 (필요시)
             document.getElementById('databaseSearchInput').value = '';
             loadDatabaseArticles(1, source);
+
+            // 필터 탭 active 상태 업데이트
+            document.querySelectorAll('.filter-tab').forEach(tab => {
+                tab.classList.remove('active');
+                if (tab.dataset.source === source) {
+                    tab.classList.add('active');
+                }
+            });
+        }
+
+        // 제외된 항목 탭 클릭 시 제외 관리 탭으로 이동
+        function showExcludedItems() {
+            // 제외 관리 탭으로 전환
+            const excludeTab = document.getElementById('exclude-tab');
+            if (excludeTab) {
+                excludeTab.click();
+            }
         }
 
         // 검색 입력창에서 Enter 키 처리

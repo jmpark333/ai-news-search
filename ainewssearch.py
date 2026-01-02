@@ -1005,7 +1005,7 @@ class SearchEngine:
 
             client = TavilyClient(api_key=TAVILY_API_KEY)
 
-            # Tavily Search API 실행
+            # Tavily Search API 실행 (days 파라미터 제거 - API에서 지원하지 않음)
             response = client.search(
                 query=clean_query,
                 max_results=num_results * 2,  # 필터링을 위해 더 많은 결과 요청
@@ -1013,8 +1013,14 @@ class SearchEngine:
                 include_answer=False,
                 include_raw_content=False,
                 include_images=False,
-                days=7,  # 최근 7일 이내 기사만 검색
             )
+
+            # API 응답 디버깅
+            logger.info(f"Tavily API 응답: {list(response.keys()) if isinstance(response, dict) else type(response)}")
+            if isinstance(response, dict) and "results" in response:
+                logger.info(f"Tavily results 개수: {len(response.get('results', []))}")
+                if response.get("results"):
+                    logger.debug(f"첫 번째 결과 키: {list(response['results'][0].keys())}")
 
             # 결과 파싱
             search_results = []
@@ -1031,7 +1037,7 @@ class SearchEngine:
                 logger.warning("Tavily 검색 결과 없음")
                 return []
 
-            logger.debug(f"Tavily 총 검색 결과: {len(search_results)}개")
+            logger.info(f"Tavily 총 검색 결과: {len(search_results)}개")
 
             results = []
 

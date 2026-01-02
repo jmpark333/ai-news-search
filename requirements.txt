@@ -1,0 +1,12 @@
+# Flask 웹 프레임워크
+Flask==3.0.0
+flask-cors==4.0.0
+
+# HTTP 요청 라이브러리
+requests==2.31.0
+
+# DuckDuckGo 검색 라이브러리
+duckduckgo-search==4.1.1
+
+# 구글 번역 라이브러리
+googletrans==4.0.0-rc1
